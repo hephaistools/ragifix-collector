@@ -1,0 +1,9 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: ragifix-collector
+Source: dépôt interne (non public)
+
+Files: *
+Copyright: 2026 Ragifix Maintainers
+License: proprietary
+ Tous droits réservés. Usage interne, sauf mention contraire du
+ propriétaire du dépôt.

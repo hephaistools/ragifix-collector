@@ -1,0 +1,34 @@
+# Environnements Python
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Configuration et secrets réels (ne jamais committer)
+*.env
+!*.env.example
+config.yaml
+
+# Données persistantes locales
+*.db
+*.db-wal
+*.db-shm
+
+# Artefacts de build Debian (générés par dpkg-buildpackage)
+debian/.debhelper/
+debian/wheel-dist/
+debian/*.substvars
+debian/*.debhelper.log
+debian/*.debhelper
+debian/files
+debian/debhelper-build-stamp
+debian/*.service
+debian/tmp/
+
+# Divers
+.DS_Store
+.pytest_cache/
+debian/ragifix-collector/

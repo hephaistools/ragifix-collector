@@ -1,0 +1,45 @@
+[Unit]
+Description=ragifix-collector - ETL de sources vers ragifix
+After=network-online.target
+Wants=network-online.target
+# Ne bloque pas le démarrage si ragifix n'est pas encore prêt (voire tourne
+# sur une autre machine) : ragifix-collector vérifie lui-même
+# l'accessibilité de ragifix à chaque cycle (health check) et se contente
+# de patienter jusqu'au prochain run.
+
+[Service]
+Type=simple
+User=ragifix-collector
+Group=ragifix-collector
+
+EnvironmentFile=/etc/ragifix-collector/ragifix-collector.env
+
+ExecStart=/opt/ragifix-collector/venv/bin/ragifix-collector --config /etc/ragifix-collector/config.yaml
+Restart=on-failure
+RestartSec=10
+
+# --- Durcissement : moindre privilège ---------------------------------
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+
+# State store (cursors) : seul ce process y écrit.
+ReadWritePaths=/var/lib/ragifix-collector
+
+# Adapter/compléter cette liste avec les répertoires réellement configurés
+# dans sources[].paths (config.yaml) — accès LECTURE SEULE uniquement.
+ReadOnlyPaths=/srv/ragifix-data
+
+[Install]
+WantedBy=multi-user.target

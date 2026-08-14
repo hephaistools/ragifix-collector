@@ -1,0 +1,21 @@
+Source: ragifix-collector
+Section: net
+Priority: optional
+Maintainer: Ragifix Maintainers <ragifix@example.com>
+Build-Depends: debhelper-compat (= 13), python3, python3-venv, python3-pip
+Standards-Version: 4.6.2
+Homepage: https://example.com/ragifix
+Rules-Requires-Root: no
+
+Package: ragifix-collector
+Architecture: all
+Depends: ${misc:Depends}, python3 (>= 3.11), python3-venv, python3-pip, adduser, ca-certificates
+Description: Mini ETL alimentant ragifix depuis des sources configurables
+ ragifix-collector détecte les changements sur des sources configurables
+ (fichiers locaux par défaut, SharePoint via extension) et pousse ces
+ changements vers l'API d'un serveur ragifix. Toute la configuration se
+ fait via /etc/ragifix-collector/config.yaml.
+ .
+ Ce paquet télécharge ses dépendances Python depuis PyPI au moment de
+ l'installation (script postinst) : un accès réseau est nécessaire lors
+ de "apt install", pas ensuite en fonctionnement normal.

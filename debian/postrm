@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+PACKAGE=ragifix-collector
+
+case "$1" in
+  purge)
+    rm -rf "/etc/$PACKAGE" "/var/lib/$PACKAGE"
+    if getent passwd "$PACKAGE" >/dev/null 2>&1; then
+        deluser --system "$PACKAGE" >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

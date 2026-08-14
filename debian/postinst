@@ -1,0 +1,62 @@
+#!/bin/sh
+set -e
+
+PACKAGE=ragifix-collector
+VENV="/opt/$PACKAGE/venv"
+WHEEL_DIR="/usr/share/$PACKAGE/dist"
+CONFIG_DIR="/etc/$PACKAGE"
+DATA_DIR="/var/lib/$PACKAGE"
+
+case "$1" in
+  configure)
+    if ! getent passwd "$PACKAGE" >/dev/null 2>&1; then
+        adduser --system --group --home "$DATA_DIR" --no-create-home "$PACKAGE"
+    fi
+
+    mkdir -p "$DATA_DIR"
+    chown -R "$PACKAGE:$PACKAGE" "$DATA_DIR"
+    chown root:"$PACKAGE" "$CONFIG_DIR"
+    chmod 750 "$CONFIG_DIR"
+
+    if [ ! -x "$VENV/bin/python3" ]; then
+        echo "$PACKAGE: création de l'environnement Python dans $VENV..."
+        python3 -m venv "$VENV"
+    fi
+
+    echo "$PACKAGE: installation des dépendances Python depuis PyPI dans $VENV (accès réseau requis)"
+    "$VENV/bin/pip" install --upgrade pip wheel --quiet
+
+    WHEEL_FILE=$(ls -t "$WHEEL_DIR"/*.whl 2>/dev/null | head -n1)
+    if [ -z "$WHEEL_FILE" ]; then
+        echo "$PACKAGE: erreur — aucun fichier .whl trouvé dans $WHEEL_DIR" >&2
+        exit 1
+    fi
+    # L'extra [sharepoint] est installé par défaut (coût négligeable : une
+    # seule dépendance supplémentaire, msal).
+    "$VENV/bin/pip" install --quiet "$WHEEL_FILE[sharepoint]"
+    chown -R "$PACKAGE:$PACKAGE" "$VENV"
+
+    ln -sf "$VENV/bin/$PACKAGE" "/usr/bin/$PACKAGE"
+
+    if [ ! -f "$CONFIG_DIR/config.yaml" ]; then
+        cp "$CONFIG_DIR/config.yaml.example" "$CONFIG_DIR/config.yaml"
+        chown root:"$PACKAGE" "$CONFIG_DIR/config.yaml"
+        chmod 640 "$CONFIG_DIR/config.yaml"
+        echo "$PACKAGE: $CONFIG_DIR/config.yaml créé depuis l'exemple — à adapter avant de démarrer le service."
+    fi
+    if [ ! -f "$CONFIG_DIR/$PACKAGE.env" ]; then
+        cp "$CONFIG_DIR/$PACKAGE.env.example" "$CONFIG_DIR/$PACKAGE.env"
+        chown root:"$PACKAGE" "$CONFIG_DIR/$PACKAGE.env"
+        chmod 640 "$CONFIG_DIR/$PACKAGE.env"
+        echo "$PACKAGE: $CONFIG_DIR/$PACKAGE.env créé depuis l'exemple — à renseigner (secrets) avant de démarrer le service."
+    fi
+
+    echo "$PACKAGE: installation terminée."
+    echo "$PACKAGE: adaptez $CONFIG_DIR/config.yaml et $CONFIG_DIR/$PACKAGE.env, puis :"
+    echo "$PACKAGE:   systemctl enable --now $PACKAGE"
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+
+PACKAGE = ragifix-collector
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	python3 -m pip wheel . --no-deps -w debian/wheel-dist
+
+override_dh_auto_test:
+	# Pas de tests exécutés lors du build du paquet.
+
+override_dh_auto_install:
+	mkdir -p debian/$(PACKAGE)/usr/share/$(PACKAGE)/dist
+	cp debian/wheel-dist/*.whl debian/$(PACKAGE)/usr/share/$(PACKAGE)/dist/
+	mkdir -p debian/$(PACKAGE)/etc/$(PACKAGE)
+	install -m 644 config.example.yaml debian/$(PACKAGE)/etc/$(PACKAGE)/config.yaml.example
+	install -m 644 deploy/$(PACKAGE).env.example debian/$(PACKAGE)/etc/$(PACKAGE)/$(PACKAGE).env.example
+	cp deploy/systemd/$(PACKAGE).service debian/$(PACKAGE).service
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf debian/wheel-dist debian/$(PACKAGE).service
