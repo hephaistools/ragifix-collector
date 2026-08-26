@@ -11,7 +11,7 @@ import logging
 import signal
 
 from .api_client import RagifixClient
-from .config import AppConfig
+from .config import AppConfig, SourceConfig
 from .connectors.registry import build_connector
 from .state import build_state_store
 from .syncer import Syncer
@@ -30,7 +30,7 @@ class CollectorDaemon:
             timeout=config.ragifix.timeout_seconds,
         )
         self._state_store = build_state_store(config.state_store.backend, config.state_store.sqlite.path)
-        self._syncer = Syncer(self._client, self._state_store)
+        self._syncer = Syncer(self._client, self._state_store, max_retries=config.sync.max_retries)
         self._sources = [s for s in config.sources if s.enabled]
 
         if not self._sources:
@@ -67,6 +67,9 @@ class CollectorDaemon:
                 await self._syncer.sync_source(source.name, connector)
             except Exception:
                 logger.exception("Échec du cycle de synchronisation pour la source '%s'", source.name)
+
+        # Mettre à jour la liste des sources dans ragifix
+        await self._syncer.sync_all_sources(self._sources)
 
     async def run(self) -> None:
         self._install_signal_handlers()

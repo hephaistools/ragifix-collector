@@ -14,6 +14,8 @@ sync:
   # cycle puis arrêt, pour être piloté par cron / systemd timer plutôt que
   # par la boucle interne).
   interval_seconds: 300
+  # Nombre maximal de tentatives avant qu'un document échoué ne soit abandonné.
+  max_retries: 5
 
 sources:
 
@@ -21,6 +23,7 @@ sources:
   - name: docs_internes
     type: local_fs
     enabled: true
+    description: "Documents internes de référence (procédures, analyses)"
     paths:
       - /srv/ragifix-data/docs
       - /srv/ragifix-data/procedures

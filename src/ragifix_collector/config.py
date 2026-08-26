@@ -73,6 +73,7 @@ class SourceConfig(BaseModel):
     name: str
     type: str
     enabled: bool = True
+    description: str | None = None
     extensions: ExtensionsFilter = Field(default_factory=ExtensionsFilter)
 
 
@@ -82,6 +83,7 @@ class SourceConfig(BaseModel):
 
 class SyncConfig(BaseModel):
     interval_seconds: int = 300
+    max_retries: int = 5
 
 
 # ------------------------------------------------------------------------- #

@@ -86,5 +86,16 @@ class RagifixClient:
         except httpx.HTTPError:
             return False
 
+    def set_sources(self, sources: list[dict]) -> None:
+        """Met à jour la liste des sources dans ragifix."""
+        response = self._client.post("/sources", json=sources)
+        response.raise_for_status()
+
+    def get_sources(self) -> list[dict]:
+        """Récupère la liste des sources depuis ragifix."""
+        response = self._client.get("/sources")
+        response.raise_for_status()
+        return response.json()["sources"]
+
     def close(self) -> None:
         self._client.close()
