@@ -55,7 +55,7 @@ Pour chaque source, à chaque intervalle :
 
 ### 2. Gestion des erreurs et retry
 
-- Table `failed_documents` : `(source_name, doc_id, error_count, last_error)`
+- Table `failed_documents` : `(source_name, doc_id, error_count, last_error, origin)`
 - Après chaque échec : `error_count += 1`
 - Si `error_count >= max_retries` : abandon (suppression de la table)
 - Au prochain run : retente les documents avec `error_count < max_retries`
@@ -74,9 +74,12 @@ Position dans le flux de changements de chaque source.
 
 **`failed_documents`** :
 ```sql
-(source_name TEXT, doc_id TEXT, error_count INTEGER, last_error TEXT, PRIMARY KEY (source_name, doc_id))
+(source_name TEXT, doc_id TEXT, error_count INTEGER, last_error TEXT, origin TEXT, PRIMARY KEY (source_name, doc_id))
 ```
-Documents qui ont échoué et doivent être retentés.
+Documents qui ont échoué et doivent être retentés. `origin` (JSON,
+nullable) conserve `metadata["origin"]` capturé au moment de l'échec —
+sans cela, un retry perdrait ce lien puisque `get_content(doc_id)` ne
+renvoie que des octets, pas les métadonnées du connecteur.
 
 ### 4. Connecteurs
 
@@ -95,6 +98,12 @@ class Change:
     extension: str
     metadata: dict
 ```
+
+Convention `metadata["origin"]` (optionnelle) : `{"kind": "https"|"file",
+"uri": "...", "label": "..."}` — le lien ou chemin le plus rapide pour
+qu'un humain retrouve le document source (lien SharePoint `webUrl`, chemin
+local...). Un connecteur qui connaît ce lien le renseigne ici ; ragifix la
+remonte telle quelle, typée, dans les réponses de son API (voir sa doc).
 
 Connecteurs disponibles :
 - `local_fs` : fichiers locaux (natif)

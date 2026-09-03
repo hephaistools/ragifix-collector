@@ -14,6 +14,7 @@ ragifix-collector) alimentent le même service.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 
@@ -58,8 +59,8 @@ class Syncer:
                 source_name,
                 len(failed_docs),
             )
-            for doc_id, error_count, last_error in failed_docs:
-                await self._retry_document(source_name, connector, doc_id, error_count)
+            for doc_id, error_count, last_error, origin in failed_docs:
+                await self._retry_document(source_name, connector, doc_id, error_count, origin)
 
         # 2. Traite les nouveaux changements
         changes, new_cursor = await connector.list_changes(cursor)
@@ -76,9 +77,10 @@ class Syncer:
             except Exception as exc:
                 failure_count += 1
                 current = self._state.get_failed(source_name, self._max_retries + 1)
-                current_count = next((c for d, c, _ in current if d == change.doc_id), 0)
+                current_count = next((c for d, c, _, _ in current if d == change.doc_id), 0)
                 new_error_count = current_count + 1
-                self._state.record_failure(source_name, change.doc_id, str(exc), new_error_count)
+                origin_json = json.dumps(change.metadata["origin"]) if change.metadata.get("origin") else None
+                self._state.record_failure(source_name, change.doc_id, str(exc), new_error_count, origin_json)
                 if new_error_count >= self._max_retries:
                     logger.error(
                         "Source '%s': abandon après %d échec(s) pour '%s'",
@@ -116,10 +118,20 @@ class Syncer:
         except Exception:
             logger.exception("Échec de la mise à jour des sources dans ragifix")
 
-    async def _retry_document(self, source_name: str, connector: Connector, doc_id: str, error_count: int) -> None:
-        """Retente l'envoi d'un document échoué."""
+    async def _retry_document(
+        self, source_name: str, connector: Connector, doc_id: str, error_count: int, origin: str | None
+    ) -> None:
+        """Retente l'envoi d'un document échoué.
+
+        `origin` (JSON sérialisé, potentiellement None) a été capturé lors du
+        premier échec et stocké dans `failed_documents` — il serait sinon
+        perdu ici, `get_content` ne renvoyant que des octets.
+        """
         api_doc_id = namespaced_doc_id(source_name, doc_id)
         extension = get_extension(doc_id)
+        metadata = {"source": source_name, "retry": True}
+        if origin:
+            metadata["origin"] = json.loads(origin)
 
         try:
             content = bytearray()
@@ -130,7 +142,7 @@ class Syncer:
                 api_doc_id,
                 bytes(content),
                 extension,
-                {"source": source_name, "retry": True},
+                metadata,
             )
             self._state.clear_success(source_name, doc_id)
             logger.info(
@@ -140,7 +152,7 @@ class Syncer:
             )
         except Exception as exc:
             new_error_count = error_count + 1
-            self._state.record_failure(source_name, doc_id, str(exc), new_error_count)
+            self._state.record_failure(source_name, doc_id, str(exc), new_error_count, origin)
             if new_error_count >= self._max_retries:
                 logger.error(
                     "Source '%s': abandon après %d échec(s) pour '%s'",

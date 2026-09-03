@@ -63,7 +63,9 @@ class LocalFsConnector:
                         doc_id=doc_id,
                         change_type=change_type,
                         extension=extension,
-                        metadata={"source_path": doc_id},
+                        metadata={
+                            "origin": {"kind": "file", "uri": Path(doc_id).as_uri(), "label": Path(doc_id).name},
+                        },
                     )
                 )
             max_mtime = max(max_mtime, mtime)

@@ -19,9 +19,11 @@ class StateStore(Protocol):
 
     def set_cursor(self, source_name: str, cursor: str) -> None: ...
 
-    def get_failed(self, source_name: str, max_retries: int) -> list[tuple[str, int, str | None]]: ...
+    def get_failed(self, source_name: str, max_retries: int) -> list[tuple[str, int, str | None, str | None]]: ...
 
-    def record_failure(self, source_name: str, doc_id: str, error_msg: str, error_count: int) -> None: ...
+    def record_failure(
+        self, source_name: str, doc_id: str, error_msg: str, error_count: int, origin: str | None = None
+    ) -> None: ...
 
     def clear_success(self, source_name: str, doc_id: str) -> None: ...
 
@@ -53,10 +55,16 @@ class SqliteStateStore:
                     doc_id TEXT NOT NULL,
                     error_count INTEGER NOT NULL DEFAULT 1,
                     last_error TEXT,
+                    origin TEXT,
                     PRIMARY KEY (source_name, doc_id)
                 )
                 """
             )
+            # Migration légère pour les bases existantes créées avant l'ajout
+            # de la colonne `origin` (préserve le lien d'origine à travers un retry).
+            columns = {row[1] for row in self._conn.execute("PRAGMA table_info(failed_documents)")}
+            if "origin" not in columns:
+                self._conn.execute("ALTER TABLE failed_documents ADD COLUMN origin TEXT")
 
     def get_cursor(self, source_name: str) -> str | None:
         with self._lock:
@@ -75,26 +83,29 @@ class SqliteStateStore:
                 (source_name, cursor),
             )
 
-    def get_failed(self, source_name: str, max_retries: int) -> list[tuple[str, int, str | None]]:
+    def get_failed(self, source_name: str, max_retries: int) -> list[tuple[str, int, str | None, str | None]]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT doc_id, error_count, last_error FROM failed_documents "
+                "SELECT doc_id, error_count, last_error, origin FROM failed_documents "
                 "WHERE source_name = ? AND error_count < ?",
                 (source_name, max_retries),
             ).fetchall()
-            return [(row[0], row[1], row[2]) for row in rows]
+            return [(row[0], row[1], row[2], row[3]) for row in rows]
 
-    def record_failure(self, source_name: str, doc_id: str, error_msg: str, error_count: int) -> None:
+    def record_failure(
+        self, source_name: str, doc_id: str, error_msg: str, error_count: int, origin: str | None = None
+    ) -> None:
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO failed_documents (source_name, doc_id, error_count, last_error)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO failed_documents (source_name, doc_id, error_count, last_error, origin)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(source_name, doc_id) DO UPDATE SET
                     error_count = excluded.error_count,
-                    last_error = excluded.last_error
+                    last_error = excluded.last_error,
+                    origin = COALESCE(excluded.origin, failed_documents.origin)
                 """,
-                (source_name, doc_id, error_count, error_msg),
+                (source_name, doc_id, error_count, error_msg, origin),
             )
 
     def clear_success(self, source_name: str, doc_id: str) -> None:

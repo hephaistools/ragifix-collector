@@ -160,7 +160,10 @@ class SharePointConnector:
             doc_id=doc_id,
             change_type=ChangeType.MODIFIED,
             extension=extension,
-            metadata={"name": name, "web_url": item.get("webUrl", "")},
+            metadata={
+                "name": name,
+                "origin": {"kind": "https", "uri": item.get("webUrl", ""), "label": name},
+            },
         )
 
     async def get_content(self, doc_id: str) -> AsyncIterator[bytes]:
