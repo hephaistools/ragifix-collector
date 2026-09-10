@@ -1,3 +1,11 @@
+ragifix-collector (0.1.0-2) unstable; urgency=medium
+
+  * Ajout des pipelines CI (gate pytest, y compris sur push vers dev) et
+    Release (build .deb + GitHub Release).
+  * Ajout d'une suite de tests pytest complète.
+
+ -- Ragifix Maintainers <ragifix@example.com>  Thu, 10 Sep 2026 12:00:00 +0000
+
 ragifix-collector (0.1.0-1) unstable; urgency=medium
 
   * Version initiale.

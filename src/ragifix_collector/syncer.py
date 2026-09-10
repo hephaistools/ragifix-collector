@@ -19,6 +19,7 @@ import logging
 from pathlib import Path
 
 from .api_client import RagifixClient
+from .config import SourceConfig
 from .connectors.base import Change, ChangeType, Connector
 from .state import StateStore
 

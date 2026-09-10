@@ -25,3 +25,15 @@ packages = ["src/ragifix_collector"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/ragifix_collector", "pyproject.toml", "README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "heavy: tests nécessitant msal installé (extra 'sharepoint') ou un accès réseau",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]

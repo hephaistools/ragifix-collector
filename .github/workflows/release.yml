@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+
+    steps:
+      - name: Install base dependencies and GitHub CLI
+        run: |
+          apt-get update
+          apt-get install -y git dpkg-dev debhelper python3 python3-venv python3-pip build-essential curl
+
+          # Installation de la CLI GitHub (gh) pour une gestion native et robuste des releases
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          apt-get update
+          apt-get install -y gh
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fix git safe directory issue
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Execute isolated tests (pytest)
+        run: |
+          python3 -m venv /tmp/ci-venv
+          /tmp/ci-venv/bin/pip install --upgrade pip
+          # Installation du projet et de ses dépendances (hatchling inclus pour PEP517)
+          /tmp/ci-venv/bin/pip install -e ".[sharepoint]" pytest
+          /tmp/ci-venv/bin/pytest
+
+      - name: Validate version consistency
+        id: version_check
+        run: |
+          # Extraction canonique via dpkg-parsechangelog
+          FULL_VERSION=$(dpkg-parsechangelog -S Version)
+          # Isolation de la version amont (ex: "0.1.0" depuis "0.1.0-1")
+          UPSTREAM_VERSION=$(echo "$FULL_VERSION" | sed 's/-[^-]*$//')
+
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG_CLEAN="${TAG#v}"
+
+          if [[ ! "$TAG_CLEAN" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::notice::Tag hors format sémantique, ignoré : $TAG"
+            exit 0
+          fi
+
+          if [ "$TAG_CLEAN" != "$UPSTREAM_VERSION" ]; then
+            echo "::error::Incohérence : le tag ($TAG_CLEAN) ne correspond pas à la version amont du changelog ($UPSTREAM_VERSION)."
+            exit 1
+          fi
+
+          echo "full_version=$FULL_VERSION" >> "$GITHUB_OUTPUT"
+          echo "upstream_version=$UPSTREAM_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build Debian package
+        run: |
+          # Compilation dans le conteneur éphémère (accès réseau requis pour hatchling/PEP517)
+          # -us -uc : omission de la signature GPG (contrainte utilisateur)
+          dpkg-buildpackage -us -uc -b
+
+          mkdir -p build-artifacts
+          mv ../ragifix-collector_*.deb build-artifacts/
+          mv ../ragifix-collector_*.changes build-artifacts/ 2>/dev/null || true
+          mv ../ragifix-collector_*.buildinfo build-artifacts/ 2>/dev/null || true
+          ls -la build-artifacts/
+
+      - name: Generate Release Notes
+        run: |
+          UPSTREAM_VERSION="${{ steps.version_check.outputs.upstream_version }}"
+          # Extraction canonique du corps des modifications
+          CHANGES=$(dpkg-parsechangelog -S Changes)
+
+          echo "## Release ${UPSTREAM_VERSION}" > release-notes.md
+          echo "" >> release-notes.md
+          echo "$CHANGES" >> release-notes.md
+
+      - name: Publish GitHub Release and Upload Asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          FULL_VERSION="${{ steps.version_check.outputs.full_version }}"
+          DEB_FILE=$(ls build-artifacts/ragifix-collector_${FULL_VERSION}_all.deb)
+
+          # Gestion de l'idempotence : suppression préalable si le tag a déjà une release associée
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release existante détectée. Suppression pour idempotence..."
+            gh release delete "$TAG" --yes
+          fi
+
+          # Création de la release et upload de l'asset
+          gh release create "$TAG" "$DEB_FILE" \
+            --title "$TAG" \
+            --notes-file release-notes.md \
+            --verify-tag \
+            --draft=false \
+            --prerelease=false
