@@ -60,8 +60,8 @@ class Syncer:
                 source_name,
                 len(failed_docs),
             )
-            for doc_id, error_count, last_error, origin in failed_docs:
-                await self._retry_document(source_name, connector, doc_id, error_count, origin)
+            for doc_id, error_count, last_error, origin, extension, metadata in failed_docs:
+                await self._retry_document(source_name, connector, doc_id, error_count, origin, extension, metadata)
 
         # 2. Traite les nouveaux changements
         changes, new_cursor = await connector.list_changes(cursor)
@@ -75,13 +75,16 @@ class Syncer:
                 await self._apply_change(source_name, connector, change)
                 self._state.clear_success(source_name, change.doc_id)
                 success_count += 1
+                await asyncio.sleep(3)
             except Exception as exc:
                 failure_count += 1
                 current = self._state.get_failed(source_name, self._max_retries + 1)
-                current_count = next((c for d, c, _, _ in current if d == change.doc_id), 0)
+                current_count = next((c for d, c, *_ in current if d == change.doc_id), 0)
                 new_error_count = current_count + 1
                 origin_json = json.dumps(change.metadata["origin"]) if change.metadata.get("origin") else None
-                self._state.record_failure(source_name, change.doc_id, str(exc), new_error_count, origin_json)
+                self._state.record_failure(
+                    source_name, change.doc_id, str(exc), new_error_count, origin_json, change.extension, change.metadata
+                )
                 if new_error_count >= self._max_retries:
                     logger.error(
                         "Source '%s': abandon après %d échec(s) pour '%s'",
@@ -120,19 +123,34 @@ class Syncer:
             logger.exception("Échec de la mise à jour des sources dans ragifix")
 
     async def _retry_document(
-        self, source_name: str, connector: Connector, doc_id: str, error_count: int, origin: str | None
+        self,
+        source_name: str,
+        connector: Connector,
+        doc_id: str,
+        error_count: int,
+        origin: str | None,
+        extension: str | None,
+        metadata: str | None,
     ) -> None:
         """Retente l'envoi d'un document échoué.
 
-        `origin` (JSON sérialisé, potentiellement None) a été capturé lors du
-        premier échec et stocké dans `failed_documents` — il serait sinon
-        perdu ici, `get_content` ne renvoyant que des octets.
+        `origin`, `extension` et `metadata` (JSON sérialisé) sont lus tels quels
+        depuis `failed_documents` : on réutilise EXACTEMENT l'extension et les
+        métadonnées de la première tentative, afin qu'un retry renvoie les mêmes
+        données qu'au premier appel. Pour les bases créées avant cette
+        correction, ces valeurs peuvent être vaines : on retombe alors sur le
+        recalcul de l'extension depuis le doc_id (valide pour local_fs, jamais
+        pour un connecteur dont le doc_id n'est pas un chemin, ex. csv_events /
+        sharepoint).
         """
         api_doc_id = namespaced_doc_id(source_name, doc_id)
-        extension = get_extension(doc_id)
-        metadata = {"source": source_name, "retry": True}
+
+        if not extension:
+            extension = get_extension(doc_id)
+        reconstructed = json.loads(metadata) if metadata else {}
+        reconstructed = {**reconstructed, "retry": True, "source": source_name}
         if origin:
-            metadata["origin"] = json.loads(origin)
+            reconstructed["origin"] = json.loads(origin)
 
         try:
             content = bytearray()
@@ -143,7 +161,7 @@ class Syncer:
                 api_doc_id,
                 bytes(content),
                 extension,
-                metadata,
+                reconstructed,
             )
             self._state.clear_success(source_name, doc_id)
             logger.info(
@@ -153,7 +171,9 @@ class Syncer:
             )
         except Exception as exc:
             new_error_count = error_count + 1
-            self._state.record_failure(source_name, doc_id, str(exc), new_error_count, origin)
+            self._state.record_failure(
+                source_name, doc_id, str(exc), new_error_count, origin, extension, reconstructed
+            )
             if new_error_count >= self._max_retries:
                 logger.error(
                     "Source '%s': abandon après %d échec(s) pour '%s'",

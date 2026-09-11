@@ -76,7 +76,7 @@ def test_sync_source_failure_records_and_advances_cursor(fake_connector_cls, fak
     # Le cursor avance même en cas d'échec.
     assert state_store.get_cursor("src1") == "cursor-2"
     failed = state_store.get_failed("src1", max_retries=3)
-    assert failed == [("a.txt", 1, "échec simulé pour src1:a.txt", None)]
+    assert failed == [("a.txt", 1, "échec simulé pour src1:a.txt", None, "txt", "{}")]
 
 
 def test_sync_source_records_origin_from_metadata_on_failure(fake_connector_cls, fake_client_cls, state_store):
@@ -111,7 +111,7 @@ def test_sync_source_abandons_doc_after_max_retries(fake_connector_cls, fake_cli
 
     # error_count atteint max_retries (2) : le document est exclu de get_failed.
     assert state_store.get_failed("src1", max_retries=2) == []
-    assert state_store.get_failed("src1", max_retries=3) == [("a.txt", 2, "échec simulé pour src1:a.txt", None)]
+    assert state_store.get_failed("src1", max_retries=3) == [("a.txt", 2, "échec simulé pour src1:a.txt", None, "txt", '{"retry": true, "source": "src1"}')]
 
 
 def test_sync_source_retries_failed_documents_before_new_changes(fake_connector_cls, fake_client_cls, state_store):
@@ -141,7 +141,79 @@ def test_sync_source_retry_failure_increments_error_count(fake_connector_cls, fa
     asyncio.run(syncer.sync_source("src1", connector))
 
     failed = state_store.get_failed("src1", max_retries=3)
-    assert failed == [("old.txt", 2, "échec simulé pour src1:old.txt", None)]
+    assert failed == [("old.txt", 2, "échec simulé pour src1:old.txt", None, "txt", '{"retry": true, "source": "src1"}')]
+
+
+# -- retry : réutilisation de l'extension et des métadonnées enregistrées --------
+
+def test_retry_reuses_stored_extension_for_uid(fake_connector_cls, fake_client_cls, state_store):
+    """Un uid csv_events (pas de chemin) ne doit pas faire recalculer l'extension
+    depuis le doc_id : l'extension enregistrée à l'échec est réutilisée telle quel."""
+    state_store.record_failure(
+        "src1",
+        "99992315",
+        "échec simulé",
+        1,
+        extension="md",
+        metadata={"uid": 99992315, "city": "Marseille", "status": "confirmé"},
+    )
+    connector = fake_connector_cls(changes=[], contents={"99992315": b"contenu"})
+    client = fake_client_cls()
+    syncer = Syncer(client, state_store, max_retries=3)
+
+    asyncio.run(syncer.sync_source("src1", connector))
+
+    assert len(client.put_calls) == 1
+    doc_id, content, extension, metadata = client.put_calls[0]
+    assert doc_id == "src1:99992315"
+    assert content == b"contenu"
+    assert extension == "md"
+    assert state_store.get_failed("src1", max_retries=3) == []
+
+
+def test_retry_reuses_stored_metadata(fake_connector_cls, fake_client_cls, state_store):
+    """Le retry restaute les métadonnées structurées enregistrées (ville, date, ...)."""
+    state_store.record_failure(
+        "src1",
+        "99992315",
+        "échec simulé",
+        1,
+        origin='{"kind": "file", "uri": "file:///x.csv", "label": "x.csv"}',
+        extension="md",
+        metadata={"uid": 99992315, "city": "Marseille", "status": "confirmé"},
+    )
+    connector = fake_connector_cls(changes=[], contents={"99992315": b"contenu"})
+    client = fake_client_cls()
+    syncer = Syncer(client, state_store, max_retries=3)
+
+    asyncio.run(syncer.sync_source("src1", connector))
+
+    _, _, _, metadata = client.put_calls[0]
+    assert metadata["uid"] == 99992315
+    assert metadata["city"] == "Marseille"
+    assert metadata["status"] == "confirmé"
+    assert metadata["retry"] is True
+    assert metadata["origin"] == {"kind": "file", "uri": "file:///x.csv", "label": "x.csv"}
+
+
+def test_error_count_accumulates_when_doc_in_queue_fails_again_same_run(fake_connector_cls, fake_client_cls, state_store):
+    """Un document déjà en file d'attente qui rééchoue dans le même cycle ne doit
+    pas faire lever d'erreur de décompression : l'échec précédent est conservé."""
+    state_store.record_failure("src1", "a.txt", "précédent échec", 1, extension="txt", metadata={"k": "v"})
+    change = Change(doc_id="a.txt", change_type=ChangeType.MODIFIED, extension="txt", metadata={"k": "v"})
+    connector = fake_connector_cls(changes=[change])
+    client = fake_client_cls(fail_on={"src1:a.txt"})
+    syncer = Syncer(client, state_store, max_retries=5)
+
+    asyncio.run(syncer.sync_source("src1", connector))
+
+    failed = state_store.get_failed("src1", max_retries=5)
+    assert len(failed) == 1
+    doc_id, error_count, last_error, origin, extension, metadata = failed[0]
+    assert doc_id == "a.txt"
+    assert error_count == 3
+    assert extension == "txt"
+    assert json.loads(metadata) == {"k": "v"}
 
 
 # -- sync_all_sources -----------------------------------------------------------

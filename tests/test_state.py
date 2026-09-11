@@ -49,7 +49,7 @@ def test_record_failure_then_get_failed(tmp_path):
     store = SqliteStateStore(str(tmp_path / "state.db"))
     store.record_failure("src1", "doc1", "boom", 1)
     failed = store.get_failed("src1", max_retries=5)
-    assert failed == [("doc1", 1, "boom", None)]
+    assert failed == [("doc1", 1, "boom", None, "", None)]
     store.close()
 
 
@@ -57,7 +57,7 @@ def test_get_failed_excludes_docs_at_or_above_max_retries(tmp_path):
     store = SqliteStateStore(str(tmp_path / "state.db"))
     store.record_failure("src1", "doc1", "boom", 5)
     assert store.get_failed("src1", max_retries=5) == []
-    assert store.get_failed("src1", max_retries=6) == [("doc1", 5, "boom", None)]
+    assert store.get_failed("src1", max_retries=6) == [("doc1", 5, "boom", None, "", None)]
     store.close()
 
 
@@ -66,7 +66,7 @@ def test_record_failure_updates_error_count_and_message(tmp_path):
     store.record_failure("src1", "doc1", "first", 1)
     store.record_failure("src1", "doc1", "second", 2)
     failed = store.get_failed("src1", max_retries=5)
-    assert failed == [("doc1", 2, "second", None)]
+    assert failed == [("doc1", 2, "second", None, "", None)]
     store.close()
 
 
@@ -76,7 +76,7 @@ def test_record_failure_preserves_origin_when_not_resupplied(tmp_path):
     # Deuxième échec sans origin explicite : l'origine précédente doit être conservée.
     store.record_failure("src1", "doc1", "second", 2, origin=None)
     failed = store.get_failed("src1", max_retries=5)
-    assert failed == [("doc1", 2, "second", '{"kind": "file"}')]
+    assert failed == [("doc1", 2, "second", '{"kind": "file"}', "", None)]
     store.close()
 
 
@@ -85,7 +85,7 @@ def test_record_failure_updates_origin_when_resupplied(tmp_path):
     store.record_failure("src1", "doc1", "first", 1, origin='{"kind": "file"}')
     store.record_failure("src1", "doc1", "second", 2, origin='{"kind": "https"}')
     failed = store.get_failed("src1", max_retries=5)
-    assert failed == [("doc1", 2, "second", '{"kind": "https"}')]
+    assert failed == [("doc1", 2, "second", '{"kind": "https"}', "", None)]
     store.close()
 
 
@@ -109,7 +109,7 @@ def test_failed_documents_scoped_per_source(tmp_path):
     store.record_failure("src2", "doc1", "boom", 1)
     store.clear_success("src1", "doc1")
     assert store.get_failed("src1", max_retries=5) == []
-    assert store.get_failed("src2", max_retries=5) == [("doc1", 1, "boom", None)]
+    assert store.get_failed("src2", max_retries=5) == [("doc1", 1, "boom", None, "", None)]
     store.close()
 
 
@@ -138,7 +138,7 @@ def test_schema_migration_adds_origin_column(tmp_path):
 
     store = SqliteStateStore(str(db_path))
     failed = store.get_failed("src1", max_retries=5)
-    assert failed == [("doc1", 1, "old-error", None)]
+    assert failed == [("doc1", 1, "old-error", None, None, None)]
     store.close()
 
 
