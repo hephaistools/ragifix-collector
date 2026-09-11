@@ -44,6 +44,16 @@ sources:
       method: deny
       list: [zip, exe, tmp]
 
+  # --- Connecteur CSV d'événements (events_propres.csv) --------------------
+  # Un événement du CSV devient un fragment Markdown + métadonnées structurées
+  # envoyés à ragifix (voir datas/etude_decoupage.md). One-shot : à piloter
+  # par cron / systemd timer (interval_seconds: 0).
+  # - name: events_marseille
+  #   type: csv_events
+  #   enabled: true
+  #   description: "Événements de Marseille (events_propres.csv)"
+  #   path: /srv/ragifix-data/events_propres.csv
+
   # Ajouter d'autres sources ici en suivant le même schéma (name/type
   # uniques). Un connecteur tiers installé (via entry_points) est
   # référencé de la même façon via son "type".

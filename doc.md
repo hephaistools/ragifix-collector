@@ -107,7 +107,10 @@ remonte telle quelle, typée, dans les réponses de son API (voir sa doc).
 
 Connecteurs disponibles :
 - `local_fs` : fichiers locaux (natif)
+- `csv_events` : CSV d'événements (`events_propres.csv`), un fragment Markdown + métadonnées par événement (natif)
 - `sharepoint` : SharePoint (optionnel, `pip install ragifix-collector[sharepoint]`)
+
+`csv_events` est le seul connecteur à appliquer une **transformation de contenu** : ragifix ne sait pas parser un CSV, et le format reçu (fragment Markdown + métadonnées structurées) est imposé par la spécification d'ingestion (`datas/etude_decoupage.md`). Il s'execute en **one-shot** (le cursor n'encode que la `mtime` du fichier : si le fichier n'a pas changé, aucun changement n'est émis) — à piloter par `cron`/timer systemd (`sync.interval_seconds: 0`).
 
 ### 5. Sync des sources
 
@@ -130,7 +133,8 @@ Cela permet au MCP de savoir quelles sources existent et leur statut.
 | `sync.interval_seconds` | Intervalle entre deux cycles (0 = one-shot) |
 | `sync.max_retries` | Nombre maximal de tentatives avant abandon |
 | `sources[].name` | Nom unique de la source |
-| `sources[].type` | Type de connecteur (`local_fs`, `sharepoint`) |
+| `sources[].type` | Type de connecteur (`local_fs`, `csv_events`, `sharepoint`) |
+| `sources[].path` | Chemin vers le CSV (`csv_events` uniquement) |
 | `sources[].enabled` | Activer/désactiver la collecte |
 | `sources[].description` | Description pour l'exposition MCP |
 | `state_store.sqlite.path` | Chemin du state store SQLite |

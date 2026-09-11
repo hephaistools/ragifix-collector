@@ -120,7 +120,7 @@ pour éviter toute collision entre sources.
 
 ## Ajouter un connecteur
 
-`local_fs` est natif. `sharepoint` nécessite son extra :
+`local_fs` et `csv_events` (CSV d'événements) sont natifs. `sharepoint` nécessite son extra :
 
 ```bash
 pip install "ragifix-collector[sharepoint]"

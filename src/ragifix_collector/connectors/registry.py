@@ -21,6 +21,7 @@ from typing import Callable
 from ragifix_collector.config import ConfigError, SourceConfig
 
 from .base import Connector
+from .csv_events import CsvEventsConnector
 from .local_fs import LocalFsConnector
 
 ENTRY_POINT_GROUP = "ragifix_collector.connectors"
@@ -42,6 +43,14 @@ def _build_local_fs(source: SourceConfig) -> Connector:
     if not paths:
         raise ConfigError(f"Source '{source.name}' (local_fs): champ 'paths' manquant ou vide")
     return LocalFsConnector(paths=paths, is_allowed_extension=source.extensions.is_allowed)
+
+
+@_register("csv_events")
+def _build_csv_events(source: SourceConfig) -> Connector:
+    path = getattr(source, "path", None)
+    if not path:
+        raise ConfigError(f"Source '{source.name}' (csv_events): champ 'path' manquant ou vide")
+    return CsvEventsConnector(path)
 
 
 @_register("sharepoint")

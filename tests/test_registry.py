@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from ragifix_collector.config import ConfigError, SourceConfig
+from ragifix_collector.connectors.csv_events import CsvEventsConnector
 from ragifix_collector.connectors.local_fs import LocalFsConnector
 from ragifix_collector.connectors.registry import build_connector
 
@@ -34,6 +35,20 @@ def test_build_local_fs_missing_paths_raises():
 def test_build_local_fs_empty_paths_raises():
     source = _source(paths=[])
     with pytest.raises(ConfigError):
+        build_connector(source)
+
+
+# -- csv_events -----------------------------------------------------------------
+
+def test_build_csv_events_success(tmp_path):
+    source = _source(type="csv_events", path=str(tmp_path / "events.csv"))
+    connector = build_connector(source)
+    assert isinstance(connector, CsvEventsConnector)
+
+
+def test_build_csv_events_missing_path_raises():
+    source = _source(type="csv_events")
+    with pytest.raises(ConfigError, match="path"):
         build_connector(source)
 
 
