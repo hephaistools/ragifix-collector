@@ -6,18 +6,13 @@ import asyncio
 import json
 
 from ragifix_collector.connectors.base import Change, ChangeType
-from ragifix_collector.syncer import Syncer, get_extension, namespaced_doc_id
+from ragifix_collector.syncer import Syncer, namespaced_doc_id
 
 
 # -- Helpers purs ---------------------------------------------------------------
 
 def test_namespaced_doc_id():
     assert namespaced_doc_id("src1", "/a/b.txt") == "src1:/a/b.txt"
-
-
-def test_get_extension():
-    assert get_extension("/a/b/file.PDF") == "pdf"
-    assert get_extension("/a/b/no_extension") == ""
 
 
 # -- sync_source: application des changements ------------------------------------
@@ -76,15 +71,18 @@ def test_sync_source_failure_records_and_advances_cursor(fake_connector_cls, fak
     # Le cursor avance même en cas d'échec.
     assert state_store.get_cursor("src1") == "cursor-2"
     failed = state_store.get_failed("src1", max_retries=3)
-    assert failed == [("a.txt", 1, "échec simulé pour src1:a.txt", None)]
+    assert failed == [("a.txt", 1, "échec simulé pour src1:a.txt", "txt", None)]
 
 
-def test_sync_source_records_origin_from_metadata_on_failure(fake_connector_cls, fake_client_cls, state_store):
+def test_sync_source_records_full_metadata_and_extension_on_failure(fake_connector_cls, fake_client_cls, state_store):
     change = Change(
         doc_id="a.txt",
         change_type=ChangeType.CREATED,
         extension="txt",
-        metadata={"origin": {"kind": "file", "uri": "file:///a.txt", "label": "a.txt"}},
+        metadata={
+            "name": "a.txt",
+            "origin": {"kind": "file", "uri": "file:///a.txt", "label": "a.txt"},
+        },
     )
     connector = fake_connector_cls(changes=[change])
     client = fake_client_cls(fail_on={"src1:a.txt"})
@@ -94,8 +92,12 @@ def test_sync_source_records_origin_from_metadata_on_failure(fake_connector_cls,
 
     failed = state_store.get_failed("src1", max_retries=3)
     assert len(failed) == 1
-    origin_json = failed[0][3]
-    assert json.loads(origin_json) == {"kind": "file", "uri": "file:///a.txt", "label": "a.txt"}
+    _, _, _, extension, metadata_json = failed[0]
+    assert extension == "txt"
+    assert json.loads(metadata_json) == {
+        "name": "a.txt",
+        "origin": {"kind": "file", "uri": "file:///a.txt", "label": "a.txt"},
+    }
 
 
 def test_sync_source_abandons_doc_after_max_retries(fake_connector_cls, fake_client_cls, state_store):
@@ -111,11 +113,15 @@ def test_sync_source_abandons_doc_after_max_retries(fake_connector_cls, fake_cli
 
     # error_count atteint max_retries (2) : le document est exclu de get_failed.
     assert state_store.get_failed("src1", max_retries=2) == []
-    assert state_store.get_failed("src1", max_retries=3) == [("a.txt", 2, "échec simulé pour src1:a.txt", None)]
+    assert state_store.get_failed("src1", max_retries=3) == [
+        ("a.txt", 2, "échec simulé pour src1:a.txt", None, None)
+    ]
 
 
 def test_sync_source_retries_failed_documents_before_new_changes(fake_connector_cls, fake_client_cls, state_store):
-    state_store.record_failure("src1", "old.txt", "ancien échec", 1, origin='{"kind": "file"}')
+    state_store.record_failure(
+        "src1", "old.txt", "ancien échec", 1, extension="txt", metadata='{"origin": {"kind": "file"}}'
+    )
     connector = fake_connector_cls(changes=[], contents={"old.txt": b"contenu-retente"})
     client = fake_client_cls()
     syncer = Syncer(client, state_store, max_retries=3)
@@ -126,10 +132,44 @@ def test_sync_source_retries_failed_documents_before_new_changes(fake_connector_
     doc_id, content, extension, metadata = client.put_calls[0]
     assert doc_id == "src1:old.txt"
     assert content == b"contenu-retente"
+    assert extension == "txt"
     assert metadata["retry"] is True
     assert metadata["origin"] == {"kind": "file"}
     # Le retry réussi nettoie l'état d'échec.
     assert state_store.get_failed("src1", max_retries=3) == []
+
+
+def test_sync_source_retry_preserves_extension_and_metadata_for_opaque_doc_id(
+    fake_connector_cls, fake_client_cls, state_store
+):
+    """Régression : le doc_id (ex: id d'item SharePoint) n'a pas forcément
+    d'extension déductible — le retry doit réutiliser l'extension et les
+    métadonnées capturées à la première tentative plutôt que de les
+    recalculer/reconstruire à partir du seul doc_id."""
+    state_store.record_failure(
+        "src1",
+        "01ABCDEF23",
+        "ancien échec",
+        1,
+        extension="pdf",
+        metadata='{"name": "Rapport.pdf", "origin": {"kind": "https", "uri": "https://x", "label": "Rapport.pdf"}}',
+    )
+    connector = fake_connector_cls(changes=[], contents={"01ABCDEF23": b"contenu-retente"})
+    client = fake_client_cls()
+    syncer = Syncer(client, state_store, max_retries=3)
+
+    asyncio.run(syncer.sync_source("src1", connector))
+
+    assert len(client.put_calls) == 1
+    doc_id, content, extension, metadata = client.put_calls[0]
+    assert doc_id == "src1:01ABCDEF23"
+    assert extension == "pdf"
+    assert metadata == {
+        "name": "Rapport.pdf",
+        "origin": {"kind": "https", "uri": "https://x", "label": "Rapport.pdf"},
+        "source": "src1",
+        "retry": True,
+    }
 
 
 def test_sync_source_retry_failure_increments_error_count(fake_connector_cls, fake_client_cls, state_store):
@@ -141,7 +181,7 @@ def test_sync_source_retry_failure_increments_error_count(fake_connector_cls, fa
     asyncio.run(syncer.sync_source("src1", connector))
 
     failed = state_store.get_failed("src1", max_retries=3)
-    assert failed == [("old.txt", 2, "échec simulé pour src1:old.txt", None)]
+    assert failed == [("old.txt", 2, "échec simulé pour src1:old.txt", None, None)]
 
 
 # -- sync_all_sources -----------------------------------------------------------
