@@ -12,6 +12,7 @@ Accès strictement en lecture seule aux répertoires sources.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncIterator, Callable
 
@@ -64,7 +65,11 @@ class LocalFsConnector:
                         change_type=change_type,
                         extension=extension,
                         metadata={
-                            "origin": {"kind": "file", "uri": Path(doc_id).as_uri(), "label": Path(doc_id).name},
+                            "collector_type": "file",
+                            "filename": Path(doc_id).name,
+                            "uri": Path(doc_id).as_uri(),
+                            "path": doc_id,
+                            "modified_at": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(),
                         },
                     )
                 )

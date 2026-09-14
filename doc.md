@@ -101,11 +101,21 @@ class Change:
     metadata: dict
 ```
 
-Convention `metadata["origin"]` (optionnelle) : `{"kind": "https"|"file",
-"uri": "...", "label": "..."}` — le lien ou chemin le plus rapide pour
-qu'un humain retrouve le document source (lien SharePoint `webUrl`, chemin
-local...). Un connecteur qui connaît ce lien le renseigne ici ; ragifix la
-remonte telle quelle, typée, dans les réponses de son API (voir sa doc).
+Schéma `metadata` formalisé (clés à plat, posées par chaque connecteur) :
+
+| Clé | Contenu | Exemple |
+|---|---|---|
+| `collector_type` | Type de connecteur (valeur fixe par connecteur) | `"file"`, `"sharepoint"` |
+| `source` | Nom de la source (ajouté par `syncer.py`, pas par le connecteur) | `"docs_internes"` |
+| `filename` | Nom du fichier | `"rapport.pdf"` |
+| `uri` | Lien ou chemin le plus rapide pour ouvrir le document source | `file://...` ou `https://...` |
+| `path` | Chemin du fichier dans son arborescence source (glob futur) | `/mnt/partage/rapport.pdf` |
+| `modified_at` | Date de dernière modification du fichier (ISO 8601), fournie par le connecteur | `"2026-01-01T00:00:00Z"` |
+| `retry` | Ajouté par `syncer.py` lors d'un retry (absent au premier envoi) | `true` |
+
+`api_client.py` fusionne en plus la clé `extension` dans ce même objet
+`metadata` avant l'envoi à ragifix (`PUT /documents/{doc_id}?metadata=...`)
+— ragifix l'exige dans `metadata`, il n'y a plus de paramètre HTTP dédié.
 
 Connecteurs disponibles :
 - `local_fs` : fichiers locaux (natif)

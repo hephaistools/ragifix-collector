@@ -88,16 +88,18 @@ def test_extension_filter_excludes_disallowed_files(tmp_path):
     assert changes[0].doc_id.endswith("a.txt")
 
 
-def test_metadata_contains_file_origin(tmp_path):
+def test_metadata_contains_file_info(tmp_path):
     f = tmp_path / "a.txt"
     f.write_text("a")
     connector = LocalFsConnector(paths=[str(tmp_path)], is_allowed_extension=_allow_all)
     changes, _ = asyncio.run(connector.list_changes(None))
 
-    origin = changes[0].metadata["origin"]
-    assert origin["kind"] == "file"
-    assert origin["label"] == "a.txt"
-    assert origin["uri"].startswith("file://")
+    metadata = changes[0].metadata
+    assert metadata["collector_type"] == "file"
+    assert metadata["filename"] == "a.txt"
+    assert metadata["uri"].startswith("file://")
+    assert metadata["path"] == changes[0].doc_id
+    assert metadata["modified_at"]  # ISO 8601, non vide
 
 
 def test_nonexistent_root_is_skipped_gracefully(tmp_path):

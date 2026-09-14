@@ -108,15 +108,35 @@ def test_to_change_filters_disallowed_extension():
 def test_to_change_returns_modified_with_metadata():
     connector = _connector()
     change = connector._to_change(
-        {"id": "1", "name": "doc.txt", "webUrl": "https://contoso/doc.txt"}
+        {
+            "id": "1",
+            "name": "doc.txt",
+            "webUrl": "https://contoso/doc.txt",
+            "lastModifiedDateTime": "2026-01-01T00:00:00Z",
+        }
     )
     assert change.change_type == ChangeType.MODIFIED
     assert change.extension == "txt"
-    assert change.metadata["origin"] == {
-        "kind": "https",
+    assert change.metadata == {
+        "collector_type": "sharepoint",
+        "filename": "doc.txt",
         "uri": "https://contoso/doc.txt",
-        "label": "doc.txt",
+        "path": "/Documents/RAG/doc.txt",
+        "modified_at": "2026-01-01T00:00:00Z",
     }
+
+
+def test_to_change_uses_parent_reference_path_when_present():
+    connector = _connector()
+    change = connector._to_change(
+        {
+            "id": "1",
+            "name": "doc.txt",
+            "webUrl": "https://contoso/doc.txt",
+            "parentReference": {"path": "/drive/root:/Documents/RAG/Sous-dossier"},
+        }
+    )
+    assert change.metadata["path"] == "/drive/root:/Documents/RAG/Sous-dossier/doc.txt"
 
 
 # -- list_changes / get_content (httpx.AsyncClient mocké) -----------------------
