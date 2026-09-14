@@ -63,12 +63,12 @@ def test_put_document_success_sends_auth_and_body():
     assert captured["path"] == "/documents/doc1"
     assert captured["auth"] == "Bearer test-token"
     assert captured["content_type"] == "application/octet-stream"
-    assert captured["params"]["extension"] == "txt"
-    assert json.loads(captured["params"]["metadata"]) == {"source": "s1"}
+    assert "extension" not in captured["params"]
+    assert json.loads(captured["params"]["metadata"]) == {"source": "s1", "extension": "txt"}
     assert captured["body"] == b"hello"
 
 
-def test_put_document_without_metadata_omits_param():
+def test_put_document_merges_extension_into_metadata_when_empty():
     captured = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -77,7 +77,7 @@ def test_put_document_without_metadata_omits_param():
 
     client = _client_with_handler(handler)
     client.put_document("doc1", b"x", "txt", {})
-    assert "metadata" not in captured["params"]
+    assert json.loads(captured["params"]["metadata"]) == {"extension": "txt"}
 
 
 def test_put_document_413_raises_document_too_large():
@@ -137,25 +137,13 @@ def test_delete_document_other_error_raises():
 
 # -- list_documents ---------------------------------------------------------------
 
-def test_list_documents_without_prefix():
+def test_list_documents_returns_documents():
     def handler(request: httpx.Request) -> httpx.Response:
-        assert "prefix" not in dict(request.url.params)
+        assert dict(request.url.params) == {}
         return httpx.Response(200, json={"documents": [{"doc_id": "a"}]})
 
     client = _client_with_handler(handler)
     assert client.list_documents() == [{"doc_id": "a"}]
-
-
-def test_list_documents_with_prefix():
-    captured = {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured["prefix"] = dict(request.url.params).get("prefix")
-        return httpx.Response(200, json={"documents": []})
-
-    client = _client_with_handler(handler)
-    client.list_documents(prefix="notes/")
-    assert captured["prefix"] == "notes/"
 
 
 # -- health -----------------------------------------------------------------------

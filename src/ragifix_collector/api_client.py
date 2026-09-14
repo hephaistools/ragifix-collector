@@ -47,10 +47,14 @@ class RagifixClient:
         )
 
     def put_document(self, doc_id: str, content: bytes, extension: str, metadata: dict) -> dict:
-        """Ajoute ou met à jour un document. Retourne le DocumentResponse JSON."""
-        params = {"extension": extension}
-        if metadata:
-            params["metadata"] = json.dumps(metadata, ensure_ascii=False)
+        """Ajoute ou met à jour un document. Retourne le DocumentResponse JSON.
+
+        `extension` est fusionnée dans `metadata` avant l'envoi : ragifix
+        exige désormais cette clé dans le blob `metadata` plutôt qu'un
+        paramètre dédié (l'extension est une métadonnée du document comme
+        une autre)."""
+        payload_metadata = {**metadata, "extension": extension}
+        params = {"metadata": json.dumps(payload_metadata, ensure_ascii=False)}
 
         response = self._client.put(
             f"/documents/{_encode_doc_id(doc_id)}",
@@ -73,9 +77,8 @@ class RagifixClient:
             return
         response.raise_for_status()
 
-    def list_documents(self, prefix: str | None = None) -> list[dict]:
-        params = {"prefix": prefix} if prefix else None
-        response = self._client.get("/documents", params=params)
+    def list_documents(self) -> list[dict]:
+        response = self._client.get("/documents")
         response.raise_for_status()
         return response.json()["documents"]
 

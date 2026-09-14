@@ -156,13 +156,22 @@ class SharePointConnector:
         if not self._is_allowed_extension(extension):
             return None
 
+        # parentReference.path est une propriété standard des driveItem Graph,
+        # mais pas garantie selon les champs effectivement renvoyés par
+        # l'API : repli sur le dossier configuré si absente (pas de
+        # reconstruction fiable des sous-dossiers dans ce cas).
+        parent_path = item.get("parentReference", {}).get("path", self._folder_path)
+
         return Change(
             doc_id=doc_id,
             change_type=ChangeType.MODIFIED,
             extension=extension,
             metadata={
-                "name": name,
-                "origin": {"kind": "https", "uri": item.get("webUrl", ""), "label": name},
+                "collector_type": "sharepoint",
+                "filename": name,
+                "uri": item.get("webUrl", ""),
+                "path": f"{parent_path}/{name}",
+                "modified_at": item.get("lastModifiedDateTime", ""),
             },
         )
 
