@@ -7,4 +7,4 @@ absolument aucun traitement de contenu (pas de parsing, pas de chunking,
 pas d'embedding).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"
