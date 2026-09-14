@@ -55,7 +55,7 @@ Pour chaque source, à chaque intervalle :
 
 ### 2. Gestion des erreurs et retry
 
-- Table `failed_documents` : `(source_name, doc_id, error_count, last_error, origin)`
+- Table `failed_documents` : `(source_name, doc_id, error_count, last_error, extension, metadata)`
 - Après chaque échec : `error_count += 1`
 - Si `error_count >= max_retries` : abandon (suppression de la table)
 - Au prochain run : retente les documents avec `error_count < max_retries`
@@ -74,12 +74,14 @@ Position dans le flux de changements de chaque source.
 
 **`failed_documents`** :
 ```sql
-(source_name TEXT, doc_id TEXT, error_count INTEGER, last_error TEXT, origin TEXT, PRIMARY KEY (source_name, doc_id))
+(source_name TEXT, doc_id TEXT, error_count INTEGER, last_error TEXT, extension TEXT, metadata TEXT,
+ PRIMARY KEY (source_name, doc_id))
 ```
-Documents qui ont échoué et doivent être retentés. `origin` (JSON,
-nullable) conserve `metadata["origin"]` capturé au moment de l'échec —
-sans cela, un retry perdrait ce lien puisque `get_content(doc_id)` ne
-renvoie que des octets, pas les métadonnées du connecteur.
+Documents qui ont échoué et doivent être retentés. `extension` et
+`metadata` (JSON, nullables) conservent respectivement `change.extension`
+et `change.metadata` capturés au moment de l'échec — sans cela, un retry
+perdrait ces informations puisque `get_content(doc_id)` ne renvoie que des
+octets, ni l'extension ni les métadonnées du connecteur.
 
 ### 4. Connecteurs
 

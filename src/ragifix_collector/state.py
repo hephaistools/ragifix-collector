@@ -19,10 +19,18 @@ class StateStore(Protocol):
 
     def set_cursor(self, source_name: str, cursor: str) -> None: ...
 
-    def get_failed(self, source_name: str, max_retries: int) -> list[tuple[str, int, str | None, str | None]]: ...
+    def get_failed(
+        self, source_name: str, max_retries: int
+    ) -> list[tuple[str, int, str | None, str | None, str | None]]: ...
 
     def record_failure(
-        self, source_name: str, doc_id: str, error_msg: str, error_count: int, origin: str | None = None
+        self,
+        source_name: str,
+        doc_id: str,
+        error_msg: str,
+        error_count: int,
+        extension: str | None = None,
+        metadata: str | None = None,
     ) -> None: ...
 
     def clear_success(self, source_name: str, doc_id: str) -> None: ...
@@ -55,16 +63,19 @@ class SqliteStateStore:
                     doc_id TEXT NOT NULL,
                     error_count INTEGER NOT NULL DEFAULT 1,
                     last_error TEXT,
-                    origin TEXT,
+                    extension TEXT,
+                    metadata TEXT,
                     PRIMARY KEY (source_name, doc_id)
                 )
                 """
             )
             # Migration légère pour les bases existantes créées avant l'ajout
-            # de la colonne `origin` (préserve le lien d'origine à travers un retry).
+            # de ces colonnes (préserve les infos du document à travers un retry).
             columns = {row[1] for row in self._conn.execute("PRAGMA table_info(failed_documents)")}
-            if "origin" not in columns:
-                self._conn.execute("ALTER TABLE failed_documents ADD COLUMN origin TEXT")
+            if "extension" not in columns:
+                self._conn.execute("ALTER TABLE failed_documents ADD COLUMN extension TEXT")
+            if "metadata" not in columns:
+                self._conn.execute("ALTER TABLE failed_documents ADD COLUMN metadata TEXT")
 
     def get_cursor(self, source_name: str) -> str | None:
         with self._lock:
@@ -83,29 +94,38 @@ class SqliteStateStore:
                 (source_name, cursor),
             )
 
-    def get_failed(self, source_name: str, max_retries: int) -> list[tuple[str, int, str | None, str | None]]:
+    def get_failed(
+        self, source_name: str, max_retries: int
+    ) -> list[tuple[str, int, str | None, str | None, str | None]]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT doc_id, error_count, last_error, origin FROM failed_documents "
+                "SELECT doc_id, error_count, last_error, extension, metadata FROM failed_documents "
                 "WHERE source_name = ? AND error_count < ?",
                 (source_name, max_retries),
             ).fetchall()
-            return [(row[0], row[1], row[2], row[3]) for row in rows]
+            return [(row[0], row[1], row[2], row[3], row[4]) for row in rows]
 
     def record_failure(
-        self, source_name: str, doc_id: str, error_msg: str, error_count: int, origin: str | None = None
+        self,
+        source_name: str,
+        doc_id: str,
+        error_msg: str,
+        error_count: int,
+        extension: str | None = None,
+        metadata: str | None = None,
     ) -> None:
         with self._lock, self._conn:
             self._conn.execute(
                 """
-                INSERT INTO failed_documents (source_name, doc_id, error_count, last_error, origin)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO failed_documents (source_name, doc_id, error_count, last_error, extension, metadata)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(source_name, doc_id) DO UPDATE SET
                     error_count = excluded.error_count,
                     last_error = excluded.last_error,
-                    origin = COALESCE(excluded.origin, failed_documents.origin)
+                    extension = COALESCE(excluded.extension, failed_documents.extension),
+                    metadata = COALESCE(excluded.metadata, failed_documents.metadata)
                 """,
-                (source_name, doc_id, error_count, error_msg, origin),
+                (source_name, doc_id, error_count, error_msg, extension, metadata),
             )
 
     def clear_success(self, source_name: str, doc_id: str) -> None:
