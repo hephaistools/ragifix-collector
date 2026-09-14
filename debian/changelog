@@ -1,3 +1,10 @@
+ragifix-collector (0.3.0-1) unstable; urgency=medium
+
+  * Numérotation alignée avec ragifix et ragifix-mcp (versions dépendantes
+    entre elles) — saut volontaire depuis 0.1.0, aucun changement de code.
+
+ -- Ragifix Maintainers <ragifix@example.com>  Mon, 14 Sep 2026 17:34:00 +0000
+
 ragifix-collector (0.1.0-2) unstable; urgency=medium
 
   * Ajout des pipelines CI (gate pytest, y compris sur push vers dev) et
