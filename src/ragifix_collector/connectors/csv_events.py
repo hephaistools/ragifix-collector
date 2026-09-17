@@ -27,10 +27,10 @@ from typing import AsyncIterator
 from .base import Change, ChangeType
 
 # Titres de section du fragment, repris à l'identique de l'etude d'ingestion.
-_HDR_TITRE = "## Titre de l'\u00e9v\u00e8ne"
-_HDR_DATE = "## Date de l'\u00e9v\u00e8ne"
-_HDR_ADRESSE = "## Adresse de l'\u00e9v\u00e8ne"
-_HDR_DESCRIP = "## Description de l'\u00e9v\u00e8ne"
+_HDR_TITRE = "## Titre de l'événement"
+_HDR_DATE = "## Date de l'événement"
+_HDR_ADRESSE = "## Adresse de l'événement"
+_HDR_DESCRIP = "## Description de l'événement"
 
 _MTIME_KEY = "mtime"
 _UID_KEY = "uid"
