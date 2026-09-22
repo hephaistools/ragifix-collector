@@ -1,9 +1,13 @@
-ragifix-collector (0.3.0-1) unstable; urgency=medium
+ragifix-collector (0.3.0) unstable; urgency=medium
 
+  * Schéma metadata à plat envoyé à ragifix : collector_type, filename,
+    uri, path, modified_at, source, et extension (fusionnée dans
+    metadata). Le filtre prefix du listing est retiré.
+  * Les retries conservent extension et metadata dans failed_documents.
   * Numérotation alignée avec ragifix et ragifix-mcp (versions dépendantes
-    entre elles) — saut volontaire depuis 0.1.0, aucun changement de code.
+    entre elles) — saut volontaire depuis 0.1.0.
 
- -- Ragifix Maintainers <ragifix@example.com>  Mon, 14 Sep 2026 17:34:00 +0000
+ -- Ragifix Maintainers <ragifix@example.com>  Tue, 22 Sep 2026 15:34:00 +0000
 
 ragifix-collector (0.1.0-2) unstable; urgency=medium
 
