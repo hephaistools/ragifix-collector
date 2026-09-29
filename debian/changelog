@@ -1,3 +1,13 @@
+ragifix-collector (0.3.1) unstable; urgency=medium
+
+  * Connecteur SharePoint : la racine du drive n'utilise plus une URL
+    Graph invalide, le téléchargement suit la redirection 302, et une
+    retentative résout le drive avant de lire le fichier.
+  * README : entrée TODO pour un filtre par motif de nom, en plus de
+    l'extension.
+
+ -- Ragifix Maintainers <ragifix@example.com>  Tue, 29 Sep 2026 11:25:40 +0200
+
 ragifix-collector (0.3.0) unstable; urgency=medium
 
   * Schéma metadata à plat envoyé à ragifix : collector_type, filename,

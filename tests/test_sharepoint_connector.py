@@ -279,6 +279,7 @@ def test_resolve_site_and_folder_is_noop_if_already_resolved(monkeypatch):
 def test_get_content_streams_bytes(monkeypatch):
     connector = _connector()
     _patch_auth(monkeypatch, connector)
+    connector._drive_id = "drive-1"
 
     stream_response = _FakeResponse(chunks=[b"chunk1", b"chunk2"])
     monkeypatch.setattr(
@@ -294,3 +295,51 @@ def test_get_content_streams_bytes(monkeypatch):
         return b"".join(pieces)
 
     assert asyncio.run(_read()) == b"chunk1chunk2"
+
+
+def test_get_content_resolves_drive_before_download(monkeypatch):
+    connector = _connector()
+    _patch_auth(monkeypatch, connector)
+
+    responses = {
+        "https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/X": _FakeResponse(
+            payload={"id": "site-1"}
+        ),
+        "https://graph.microsoft.com/v1.0/sites/site-1/drive": _FakeResponse(payload={"id": "drive-1"}),
+        "https://graph.microsoft.com/v1.0/drives/drive-1/root:/Documents/RAG": _FakeResponse(
+            payload={"id": "folder-1"}
+        ),
+    }
+    stream_response = _FakeResponse(chunks=[b"pdf"])
+    monkeypatch.setattr(
+        sharepoint_module.httpx,
+        "AsyncClient",
+        lambda **kw: _FakeAsyncClient(responses, stream_response=stream_response),
+    )
+
+    async def _read():
+        pieces = []
+        async for piece in connector.get_content("item-1"):
+            pieces.append(piece)
+        return b"".join(pieces)
+
+    assert asyncio.run(_read()) == b"pdf"
+    assert connector._drive_id == "drive-1"
+
+
+def test_resolve_root_folder_omits_empty_path(monkeypatch):
+    connector = _connector(folder_path="/")
+    _patch_auth(monkeypatch, connector)
+
+    responses = {
+        "https://graph.microsoft.com/v1.0/sites/contoso.sharepoint.com:/sites/X": _FakeResponse(
+            payload={"id": "site-1"}
+        ),
+        "https://graph.microsoft.com/v1.0/sites/site-1/drive": _FakeResponse(payload={"id": "drive-1"}),
+        "https://graph.microsoft.com/v1.0/drives/drive-1/root": _FakeResponse(payload={"id": "root-1"}),
+    }
+    client = _FakeAsyncClient(responses)
+
+    asyncio.run(connector._resolve_site_and_folder(client))
+
+    assert connector._folder_item_id == "root-1"
