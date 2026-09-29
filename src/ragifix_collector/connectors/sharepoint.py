@@ -101,9 +101,11 @@ class SharePointConnector:
         self._drive_id = resp.json()["id"]
 
         folder_rel = self._folder_path.strip("/")
-        resp = await client.get(
-            f"{GRAPH_BASE}/drives/{self._drive_id}/root:/{folder_rel}", headers=self._headers()
-        )
+        if folder_rel:
+            folder_url = f"{GRAPH_BASE}/drives/{self._drive_id}/root:/{folder_rel}"
+        else:
+            folder_url = f"{GRAPH_BASE}/drives/{self._drive_id}/root"
+        resp = await client.get(folder_url, headers=self._headers())
         resp.raise_for_status()
         self._folder_item_id = resp.json()["id"]
         logger.info(
@@ -177,8 +179,10 @@ class SharePointConnector:
 
     async def get_content(self, doc_id: str) -> AsyncIterator[bytes]:
         await self._ensure_auth()
-        url = f"{GRAPH_BASE}/drives/{self._drive_id}/items/{doc_id}/content"
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            if not self._drive_id:
+                await self._resolve_site_and_folder(client)
+            url = f"{GRAPH_BASE}/drives/{self._drive_id}/items/{doc_id}/content"
             async with client.stream("GET", url, headers=self._headers()) as response:
                 response.raise_for_status()
                 async for piece in response.aiter_bytes(65536):

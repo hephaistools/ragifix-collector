@@ -48,7 +48,7 @@ dpkg-buildpackage -us -uc -b
 
 2. Puis **l'installer** via `apt` :
 ```bash
-sudo apt install -y ../ragifix-collector_0.3.0_all.deb
+sudo apt install -y ../ragifix-collector_0.3.1_all.deb
 ```
 
 L'installation (`postinst`) construit un environnement virtuel Python dans `/opt/ragifix-collector/venv` et y installe les dépendances (extra `sharepoint` inclus).
@@ -121,3 +121,7 @@ mon_connecteur = "mon_paquet.connector:build_connector"
 ```
 
 Une fois ce paquet installé dans le même environnement (ou dans le venv `/opt/ragifix-collector/venv` en production), le référencer dans `config.yaml` via `type: mon_connecteur`.
+
+## TODO
+
+- [ ] ajouter un filtre des fichiers par motif de nom, en plus du filtre par extension (`extensions`).
